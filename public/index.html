@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>电商订单管理系统</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>电商订单生命周期管理系统</h1>
+      <p class="subtitle">库存预占 · 分布式锁 · 状态机 · 支付沙箱 · 退款流程 · 定时任务 · 物流轨迹</p>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="products">商品列表</button>
+      <button class="tab-btn" data-tab="create-order">创建订单</button>
+      <button class="tab-btn" data-tab="orders">订单管理</button>
+      <button class="tab-btn" data-tab="order-detail">订单详情</button>
+      <button class="tab-btn" data-tab="refund">退款管理</button>
+    </nav>
+
+    <main>
+      <section id="products" class="tab-content active">
+        <h2>商品列表</h2>
+        <div class="product-grid" id="productGrid"></div>
+      </section>
+
+      <section id="create-order" class="tab-content">
+        <h2>创建订单</h2>
+        <div class="form-card">
+          <div class="form-group">
+            <label>用户ID</label>
+            <input type="text" id="userId" value="user_001" readonly>
+          </div>
+          <div class="form-group">
+            <label>选择商品</label>
+            <div id="orderItems" class="order-items"></div>
+          </div>
+          <div class="form-group">
+            <label>收货人姓名</label>
+            <input type="text" id="shipName" value="张三">
+          </div>
+          <div class="form-group">
+            <label>联系电话</label>
+            <input type="text" id="shipPhone" value="13800138000">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>省份</label>
+              <input type="text" id="shipProvince" value="广东省">
+            </div>
+            <div class="form-group">
+              <label>城市</label>
+              <input type="text" id="shipCity" value="深圳市">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>区县</label>
+              <input type="text" id="shipDistrict" value="南山区">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>详细地址</label>
+            <input type="text" id="shipDetail" value="科技园南区T3栋">
+          </div>
+          <div class="order-summary" id="orderSummary">
+            <span>订单总金额：</span>
+            <span class="total-price" id="totalPrice">¥0.00</span>
+          </div>
+          <button class="btn btn-primary btn-large" onclick="createOrder()">
+            提交订单（预占库存）
+          </button>
+          <p class="hint">* 提交订单时会使用分布式锁预占库存，防止超卖</p>
+        </div>
+      </section>
+
+      <section id="orders" class="tab-content">
+        <div class="section-header">
+          <h2>订单管理</h2>
+          <button class="btn btn-secondary" onclick="refreshOrders()">刷新</button>
+        </div>
+        <div class="order-list" id="orderList"></div>
+      </section>
+
+      <section id="order-detail" class="tab-content">
+        <h2>订单详情</h2>
+        <div id="orderDetailContent">
+          <p class="empty">请从订单管理中选择一个订单查看详情</p>
+        </div>
+      </section>
+
+      <section id="refund" class="tab-content">
+        <h2>退款管理</h2>
+        <div id="refundList" class="refund-list">
+          <p class="empty">暂无退款记录</p>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

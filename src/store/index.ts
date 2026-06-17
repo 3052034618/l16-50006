@@ -1,0 +1,171 @@
+import { Order, Product, StockReservation, PaymentRecord, RefundRecord } from '../types';
+
+class InMemoryStore {
+  private products: Map<string, Product> = new Map();
+  private orders: Map<string, Order> = new Map();
+  private reservations: Map<string, StockReservation> = new Map();
+  private paymentRecords: Map<string, PaymentRecord> = new Map();
+  private refundRecords: Map<string, RefundRecord> = new Map();
+  private locks: Map<string, { value: string; expireAt: number }> = new Map();
+
+  private static instance: InMemoryStore;
+
+  private constructor() {}
+
+  static getInstance(): InMemoryStore {
+    if (!InMemoryStore.instance) {
+      InMemoryStore.instance = new InMemoryStore();
+    }
+    return InMemoryStore.instance;
+  }
+
+  getProducts(): Product[] {
+    return Array.from(this.products.values());
+  }
+
+  getProduct(id: string): Product | undefined {
+    return this.products.get(id);
+  }
+
+  addProduct(product: Product): void {
+    this.products.set(product.id, product);
+  }
+
+  updateProduct(id: string, updates: Partial<Product>): Product | undefined {
+    const product = this.products.get(id);
+    if (!product) return undefined;
+    const updated = { ...product, ...updates };
+    this.products.set(id, updated);
+    return updated;
+  }
+
+  getOrders(): Order[] {
+    return Array.from(this.orders.values()).sort((a, b) =>
+      b.createdAt.getTime() - a.createdAt.getTime()
+    );
+  }
+
+  getOrder(id: string): Order | undefined {
+    return this.orders.get(id);
+  }
+
+  getOrderByNo(orderNo: string): Order | undefined {
+    return Array.from(this.orders.values()).find(o => o.orderNo === orderNo);
+  }
+
+  getOrdersByUserId(userId: string): Order[] {
+    return Array.from(this.orders.values())
+      .filter(o => o.userId === userId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  addOrder(order: Order): void {
+    this.orders.set(order.id, order);
+  }
+
+  updateOrder(id: string, updates: Partial<Order>): Order | undefined {
+    const order = this.orders.get(id);
+    if (!order) return undefined;
+    const updated = { ...order, ...updates, updatedAt: new Date() };
+    this.orders.set(id, updated);
+    return updated;
+  }
+
+  getReservation(id: string): StockReservation | undefined {
+    return this.reservations.get(id);
+  }
+
+  getReservationsByOrderId(orderId: string): StockReservation[] {
+    return Array.from(this.reservations.values()).filter(r => r.orderId === orderId);
+  }
+
+  addReservation(reservation: StockReservation): void {
+    this.reservations.set(reservation.id, reservation);
+  }
+
+  updateReservation(id: string, updates: Partial<StockReservation>): StockReservation | undefined {
+    const reservation = this.reservations.get(id);
+    if (!reservation) return undefined;
+    const updated = { ...reservation, ...updates };
+    this.reservations.set(id, updated);
+    return updated;
+  }
+
+  getExpiredReservations(now: Date): StockReservation[] {
+    return Array.from(this.reservations.values()).filter(
+      r => r.status === 'ACTIVE' && r.expiresAt <= now
+    );
+  }
+
+  getPaymentRecord(id: string): PaymentRecord | undefined {
+    return this.paymentRecords.get(id);
+  }
+
+  getPaymentRecordsByOrderId(orderId: string): PaymentRecord[] {
+    return Array.from(this.paymentRecords.values())
+      .filter(p => p.orderId === orderId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  addPaymentRecord(record: PaymentRecord): void {
+    this.paymentRecords.set(record.id, record);
+  }
+
+  updatePaymentRecord(id: string, updates: Partial<PaymentRecord>): PaymentRecord | undefined {
+    const record = this.paymentRecords.get(id);
+    if (!record) return undefined;
+    const updated = { ...record, ...updates };
+    this.paymentRecords.set(id, updated);
+    return updated;
+  }
+
+  getRefundRecord(id: string): RefundRecord | undefined {
+    return this.refundRecords.get(id);
+  }
+
+  getRefundRecordsByOrderId(orderId: string): RefundRecord[] {
+    return Array.from(this.refundRecords.values())
+      .filter(r => r.orderId === orderId)
+      .sort((a, b) => b.applyTime.getTime() - a.applyTime.getTime());
+  }
+
+  addRefundRecord(record: RefundRecord): void {
+    this.refundRecords.set(record.id, record);
+  }
+
+  updateRefundRecord(id: string, updates: Partial<RefundRecord>): RefundRecord | undefined {
+    const record = this.refundRecords.get(id);
+    if (!record) return undefined;
+    const updated = { ...record, ...updates };
+    this.refundRecords.set(id, updated);
+    return updated;
+  }
+
+  setLock(key: string, value: string, expireMs: number): boolean {
+    const existing = this.locks.get(key);
+    const now = Date.now();
+    if (existing && existing.expireAt > now) {
+      return false;
+    }
+    this.locks.set(key, { value, expireAt: now + expireMs });
+    return true;
+  }
+
+  releaseLock(key: string, value: string): boolean {
+    const lock = this.locks.get(key);
+    if (!lock || lock.value !== value) return false;
+    this.locks.delete(key);
+    return true;
+  }
+
+  cleanExpiredLocks(): void {
+    const now = Date.now();
+    for (const [key, lock] of this.locks) {
+      if (lock.expireAt <= now) {
+        this.locks.delete(key);
+      }
+    }
+  }
+}
+
+export const db = InMemoryStore.getInstance();

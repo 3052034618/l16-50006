@@ -4,7 +4,12 @@ let currentOrder = null;
 let selectedQuantities = {};
 let refunds = [];
 let paymentRecords = [];
+let paymentSummary = null;
 let currentRefundFilter = '';
+let currentPaymentFilter = 'ALL';
+let currentTimelineFilter = 'ALL';
+let currentProductId = '';
+let currentReservationFilter = '';
 
 const statusMap = {
   'PENDING_PAYMENT': '待付款',
@@ -412,19 +417,54 @@ async function renderOrderDetail() {
     const tlRes = await fetch(`/api/orders/${order.id}/timeline`);
     const tlData = await tlRes.json();
     if (tlData.code === 0 && tlData.data.length > 0) {
-      timelineHtml = `<div class="order-timeline">${tlData.data.map((evt, idx) => `
-        <div class="timeline-item ${idx === tlData.data.length - 1 ? 'latest' : ''}">
-          <div class="timeline-dot ${getEventColor(evt.eventType)}"></div>
-          <div class="timeline-content">
-            <div class="timeline-header-row">
-              <span class="timeline-event-type ${getEventColor(evt.eventType)}">${eventTypeMap[evt.eventType] || evt.eventType}</span>
-              <span class="timeline-time">${formatDateTime(evt.createdAt)}</span>
-            </div>
-            <div class="timeline-desc">${evt.description}</div>
-            <div class="timeline-operator">操作人: ${evt.operator}</div>
-          </div>
+      const allEvents = tlData.data;
+      const filterBtn = (name, label) =>
+        `<button class="timeline-filter-btn ${currentTimelineFilter === name ? 'active' : ''}"
+                 onclick="filterTimeline('${name}')">${label}</button>`;
+      const filterBar = `
+        <div class="timeline-filter-bar">
+          ${filterBtn('ALL', '全部')}
+          ${filterBtn('PAYMENT', '支付相关')}
+          ${filterBtn('STOCK', '库存相关')}
+          ${filterBtn('REFUND', '退款相关')}
+          ${filterBtn('ORDER', '订单流转')}
         </div>
-      `).join('')}</div>`;
+      `;
+      const filterMap = {
+        'ALL': () => true,
+        'PAYMENT': e => ['PAYMENT_SUCCESS', 'PAYMENT_FAILED'].includes(e.eventType),
+        'STOCK': e => ['STOCK_RESERVED', 'STOCK_RELEASED', 'STOCK_CONFIRMED'].includes(e.eventType),
+        'REFUND': e => e.eventType.startsWith('REFUND'),
+        'ORDER': e => ['CREATED', 'SHIPPED', 'COMPLETED', 'CANCELLED', 'AUTO_CLOSED'].includes(e.eventType),
+      };
+      const filterFn = filterMap[currentTimelineFilter] || filterMap.ALL;
+      const filteredEvents = allEvents.filter(filterFn);
+      const eventBadgeColor = (md) => {
+        if (!md) return '';
+        const parts = [];
+        if (md.amount != null) parts.push(`<span class="event-badge amount">金额 ¥${Number(md.amount).toLocaleString()}</span>`);
+        if (md.quantity != null && md.productName) parts.push(`<span class="event-badge qty">${md.productName} x${md.quantity}</span>`);
+        if (md.stockBefore != null && md.stockAfter != null) parts.push(`<span class="event-badge stock">库存 ${md.stockBefore} → ${md.stockAfter}</span>`);
+        if (md.refundAmount != null) parts.push(`<span class="event-badge refund">退款 ¥${Number(md.refundAmount).toLocaleString()}</span>`);
+        if (md.paymentMethod) parts.push(`<span class="event-badge pay-method">${md.paymentMethod}</span>`);
+        return parts.length ? `<div class="event-badges">${parts.join('')}</div>` : '';
+      };
+      timelineHtml = filterBar + (filteredEvents.length === 0
+        ? '<p class="empty">该分类下暂无记录</p>'
+        : `<div class="order-timeline">${filteredEvents.map((evt, idx) => `
+          <div class="timeline-item ${idx === filteredEvents.length - 1 ? 'latest' : ''}">
+            <div class="timeline-dot ${getEventColor(evt.eventType)}"></div>
+            <div class="timeline-content">
+              <div class="timeline-header-row">
+                <span class="timeline-event-type ${getEventColor(evt.eventType)}">${eventTypeMap[evt.eventType] || evt.eventType}</span>
+                <span class="timeline-time">${formatDateTime(evt.createdAt)}</span>
+              </div>
+              <div class="timeline-desc">${evt.description}</div>
+              ${eventBadgeColor(evt.metadata)}
+              <div class="timeline-operator">操作人: ${evt.operator}</div>
+            </div>
+          </div>
+        `).join('')}</div>`;
     } else {
       timelineHtml = '<p class="empty">暂无时间线记录</p>';
     }
@@ -434,8 +474,11 @@ async function renderOrderDetail() {
 
   container.innerHTML = `
     <div class="order-detail-card">
+      <div class="detail-section" style="display:flex;justify-content:space-between;align-items:center;padding-bottom:8px;border-bottom:2px solid #f0f2f5;margin-bottom:16px">
+        <h3 style="margin-bottom:0;border-bottom:none;padding-bottom:0">订单信息</h3>
+        <div>${renderReturnBtn()}</div>
+      </div>
       <div class="detail-section">
-        <h3>订单信息</h3>
         <div class="detail-row">
           <span class="detail-label">订单号</span>
           <span class="detail-value">${order.orderNo}</span>
@@ -812,18 +855,43 @@ async function showRefundDetail(refundId) {
 
     const panel = document.getElementById('refundDetailPanel');
     panel.style.display = 'block';
+    const firstPay = payRecords[0] || {};
+    const originalAmount = Number(order?.totalAmount || firstPay.amount || 0);
+    const refundAmount = Number(r.amount || 0);
+    const diff = originalAmount - refundAmount;
     panel.innerHTML = `
       <div class="refund-detail-card">
         <div class="detail-section">
           <h3>退款详情</h3>
           <div class="detail-row"><span class="detail-label">退款单号</span><span class="detail-value">${r.id}</span></div>
           <div class="detail-row"><span class="detail-label">退款状态</span><span class="refund-status ${r.status}">${refundStatusMap[r.status]}</span></div>
-          <div class="detail-row"><span class="detail-label">退款金额</span><span class="detail-value" style="color:#e74c3c">¥${r.amount.toLocaleString()}</span></div>
           <div class="detail-row"><span class="detail-label">退款原因</span><span class="detail-value">${r.reason}</span></div>
           <div class="detail-row"><span class="detail-label">申请时间</span><span class="detail-value">${formatDateTime(r.applyTime)}</span></div>
           ${r.approveTime ? `<div class="detail-row"><span class="detail-label">审批时间</span><span class="detail-value">${formatDateTime(r.approveTime)}</span></div>` : ''}
           ${r.refundTime ? `<div class="detail-row"><span class="detail-label">退款完成时间</span><span class="detail-value">${formatDateTime(r.refundTime)}</span></div>` : ''}
           ${r.transactionId ? `<div class="detail-row"><span class="detail-label">退款流水号</span><span class="detail-value">${r.transactionId}</span></div>` : ''}
+        </div>
+        <div class="detail-section">
+          <h3>💰 金额核对</h3>
+          <div class="amount-reconcile-grid">
+            <div class="amount-card original">
+              <span class="amount-label">原支付金额</span>
+              <span class="amount-value">¥${originalAmount.toLocaleString()}</span>
+              <span class="amount-hint">订单 ${order?.orderNo || '-'}</span>
+            </div>
+            <div class="amount-arrow">−</div>
+            <div class="amount-card refund">
+              <span class="amount-label">退款金额</span>
+              <span class="amount-value">¥${refundAmount.toLocaleString()}</span>
+              <span class="amount-hint">${refundStatusMap[r.status] || '退款'}</span>
+            </div>
+            <div class="amount-arrow">=</div>
+            <div class="amount-card diff">
+              <span class="amount-label">差额</span>
+              <span class="amount-value">¥${diff.toLocaleString()}</span>
+              <span class="amount-hint">${diff === 0 ? '全额退款' : diff > 0 ? '部分退款' : '异常'}</span>
+            </div>
+          </div>
         </div>
         ${order ? `
         <div class="detail-section">
@@ -838,18 +906,23 @@ async function showRefundDetail(refundId) {
         <div class="detail-section">
           <h3>关联支付记录</h3>
           ${payRecords.map(p => `
-            <div class="detail-row"><span class="detail-label">支付单号</span><span class="detail-value">${p.id}</span></div>
-            <div class="detail-row"><span class="detail-label">支付方式</span><span class="detail-value">${p.paymentMethod}</span></div>
-            <div class="detail-row"><span class="detail-label">支付状态</span><span class="detail-value">${paymentStatusMap[p.status]}</span></div>
-            ${p.paidAt ? `<div class="detail-row"><span class="detail-label">支付时间</span><span class="detail-value">${formatDateTime(p.paidAt)}</span></div>` : ''}
-            ${p.transactionId ? `<div class="detail-row"><span class="detail-label">交易流水号</span><span class="detail-value">${p.transactionId}</span></div>` : ''}
+            <div class="pay-subcard">
+              <div class="detail-row"><span class="detail-label">支付单号</span><span class="detail-value">${p.id}</span></div>
+              <div class="detail-row"><span class="detail-label">支付方式</span><span class="detail-value">${p.paymentMethod}</span></div>
+              <div class="detail-row"><span class="detail-label">原支付金额</span><span class="detail-value" style="font-weight:700;color:#2c3e50">¥${Number(p.amount).toLocaleString()}</span></div>
+              <div class="detail-row"><span class="detail-label">退款金额</span><span class="detail-value" style="font-weight:700;color:#e74c3c">¥${refundAmount.toLocaleString()}</span></div>
+              <div class="detail-row"><span class="detail-label">差额</span><span class="detail-value" style="font-weight:700;color:#667eea">¥${(Number(p.amount) - refundAmount).toLocaleString()}</span></div>
+              <div class="detail-row"><span class="detail-label">当前支付状态</span><span class="payment-status ${p.status}" style="font-weight:600">${paymentStatusMap[p.status]}</span></div>
+              ${p.paidAt ? `<div class="detail-row"><span class="detail-label">支付时间</span><span class="detail-value">${formatDateTime(p.paidAt)}</span></div>` : ''}
+              ${p.transactionId ? `<div class="detail-row"><span class="detail-label">交易流水号</span><span class="detail-value">${p.transactionId}</span></div>` : ''}
+            </div>
           `).join('')}
         </div>
         ` : ''}
         <div class="detail-section">
           <h3>退款进度</h3>
           <div class="refund-progress">
-            <div class="progress-step ${r.status !== 'PENDING' || true ? 'done' : ''}">
+            <div class="progress-step done">
               <div class="progress-dot"></div>
               <span>申请提交</span>
             </div>
@@ -934,15 +1007,59 @@ async function rejectRefund(refundId) {
 
 async function loadPaymentRecords() {
   try {
-    const res = await fetch('/api/payment/records');
-    const data = await res.json();
-    if (data.code === 0) {
-      paymentRecords = data.data;
-      renderPaymentRecords();
+    const [summaryRes, recordsRes] = await Promise.all([
+      fetch('/api/payment/summary'),
+      fetch(currentPaymentFilter === 'ALL' ? '/api/payment/records' : `/api/payment/records?status=${currentPaymentFilter}`)
+    ]);
+    const summaryData = await summaryRes.json();
+    const recordsData = await recordsRes.json();
+    if (summaryData.code === 0) {
+      paymentSummary = summaryData.data;
     }
+    if (recordsData.code === 0) {
+      paymentRecords = recordsData.data;
+    }
+    renderPaymentDashboard();
+    renderPaymentRecords();
   } catch (e) {
     console.error('加载支付记录失败', e);
   }
+}
+
+function renderPaymentDashboard() {
+  const container = document.getElementById('paymentDashboard');
+  if (!paymentSummary) {
+    container.innerHTML = '';
+    return;
+  }
+  const cards = [
+    { key: 'total', label: '全部', cls: 'total', icon: '📊' },
+    { key: 'paid', label: '支付成功', cls: 'success', icon: '✅' },
+    { key: 'refunding', label: '退款中', cls: 'processing', icon: '⏳' },
+    { key: 'refunded', label: '已退款', cls: 'refunded', icon: '↩️' },
+    { key: 'failed', label: '支付失败', cls: 'failed', icon: '❌' },
+  ];
+  const filterKey = { 'total': 'ALL', 'paid': 'PAID', 'refunding': 'REFUNDING', 'refunded': 'REFUNDED', 'failed': 'FAILED' };
+  container.innerHTML = `
+    <div class="payment-dashboard-grid">
+      ${cards.map(c => {
+        const data = paymentSummary[c.key];
+        const active = currentPaymentFilter === filterKey[c.key];
+        return `
+          <div class="dash-card ${c.cls} ${active ? 'active' : ''}" onclick="filterPayment('${filterKey[c.key]}')">
+            <div class="dash-icon">${c.icon}</div>
+            <div class="dash-label">${c.label}</div>
+            <div class="dash-count">${data.count} 笔</div>
+            <div class="dash-amount">¥${data.amount.toLocaleString()}</div>
+          </div>`;
+      }).join('')}
+    </div>
+  `;
+}
+
+function filterPayment(status) {
+  currentPaymentFilter = status;
+  loadPaymentRecords();
 }
 
 function renderPaymentRecords() {
@@ -1001,6 +1118,141 @@ function renderPaymentRecords() {
     </div>
   `;
   }).join('');
+}
+
+function filterTimeline(type) {
+  currentTimelineFilter = type;
+  renderOrderDetail();
+}
+
+async function showReservationDetail(productId, initialFilter) {
+  try {
+    currentProductId = productId;
+    if (initialFilter) currentReservationFilter = initialFilter;
+    const url = currentReservationFilter
+      ? `/api/products/${productId}/reservations?category=${currentReservationFilter}`
+      : `/api/products/${productId}/reservations`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.code === 0) {
+      const { summary, categorySummary, reservations } = data.data;
+      const product = products.find(p => p.id === productId);
+      const modal = document.getElementById('reservationModal');
+      const body = document.getElementById('reservationModalBody');
+      const catMap = [
+        { key: '', label: '全部', qtyKey: null },
+        { key: 'PENDING_PAYMENT', label: '待付款占用', qtyKey: 'pendingPayment' },
+        { key: 'CONFIRMED', label: '已成交占用', qtyKey: 'confirmedTrade' },
+        { key: 'CANCEL_RELEASED', label: '取消释放', qtyKey: 'cancelReleased' },
+        { key: 'TIMEOUT_RELEASED', label: '超时释放', qtyKey: 'timeoutReleased' },
+      ];
+      const categoryCard = (key, label, cs) => cs ? `
+        <div class="cat-stat ${currentReservationFilter === key ? 'active' : ''}" onclick="filterReservation('${key}', '${productId}')">
+          <span class="cat-count">${cs.count} 笔</span>
+          <span class="cat-label">${label}</span>
+          <span class="cat-qty">${cs.quantity} 件</span>
+        </div>
+      ` : '';
+      const reservationCatLabel = (cat) => ({
+        'PENDING_PAYMENT': '待付款',
+        'CONFIRMED': '已成交',
+        'CANCEL_RELEASED': '取消释放',
+        'TIMEOUT_RELEASED': '超时释放'
+      }[cat] || cat);
+      const reservationCatColor = (cat) => ({
+        'PENDING_PAYMENT': 'pending',
+        'CONFIRMED': 'confirmed',
+        'CANCEL_RELEASED': 'cancel',
+        'TIMEOUT_RELEASED': 'timeout'
+      }[cat] || '');
+
+      body.innerHTML = `
+        <div class="reservation-summary">
+          <h4>${product ? product.name : productId}</h4>
+          <div class="reservation-summary-grid">
+            <div class="reservation-stat">
+              <span class="stat-value stat-active">${summary.activeQuantity}</span>
+              <span class="stat-label">预占中(待付款)</span>
+            </div>
+            <div class="reservation-stat">
+              <span class="stat-value stat-confirmed">${summary.confirmedQuantity}</span>
+              <span class="stat-label">已确认(已成交)</span>
+            </div>
+            <div class="reservation-stat">
+              <span class="stat-value stat-released">${summary.releasedQuantity}</span>
+              <span class="stat-label">已释放(取消/超时)</span>
+            </div>
+          </div>
+          <div class="category-grid">
+            ${catMap.slice(1).map(c => categoryCard(c.key, c.label, categorySummary[c.qtyKey])).join('')}
+          </div>
+          <div class="filter-bar" style="margin-top:12px">
+            ${catMap.map(c =>
+              `<button class="filter-btn ${currentReservationFilter === c.key ? 'active' : ''}"
+                       onclick="filterReservation('${c.key}', '${productId}')">${c.label}</button>`
+            ).join('')}
+          </div>
+        </div>
+        <div class="reservation-list">
+          ${reservations.length === 0 ? '<p class="empty">暂无预占记录</p>' : reservations.map(r => `
+            <div class="reservation-item ${reservationCatColor(r.reservationCategory)}">
+              <div class="reservation-header-row">
+                <span class="reservation-order" onclick="event.stopPropagation();viewOrderDetailFromReservation('${r.orderId}', '${productId}', '${currentReservationFilter}')"
+                      style="cursor:pointer;color:#667eea;font-weight:600">
+                  订单 ${(r.orderNo || r.orderId).slice(0, 14)}...
+                </span>
+                <span class="reservation-cat-tag ${reservationCatColor(r.reservationCategory)}">${reservationCatLabel(r.reservationCategory)}</span>
+              </div>
+              <div class="reservation-detail">
+                <span style="color:#e67e22;font-weight:600">数量: ${r.quantity}</span>
+                <span>创建: ${formatDate(r.createdAt)}</span>
+                ${r.status === 'ACTIVE' ? `<span>过期: ${formatDate(r.expiresAt)}</span>` : ''}
+                ${r.orderStatus ? `<span>订单状态: ${statusMap[r.orderStatus] || r.orderStatus}</span>` : ''}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+
+      modal.style.display = 'flex';
+    }
+  } catch (e) {
+    showToast('加载预占明细失败', 'error');
+  }
+}
+
+function filterReservation(category, productId) {
+  currentReservationFilter = category;
+  showReservationDetail(productId, null);
+}
+
+async function viewOrderDetailFromReservation(orderId, productId, reservationFilter) {
+  currentReservationFilter = reservationFilter;
+  sessionStorage.setItem('reservation_return', JSON.stringify({ productId, reservationFilter }));
+  closeReservationModal();
+  await viewOrderDetail(orderId);
+  const observer = new MutationObserver((mutations, obs) => {
+    const backBtn = document.getElementById('returnToReservationBtn');
+    if (backBtn || !currentOrder) {
+      obs.disconnect();
+    }
+  });
+}
+
+function renderReturnBtn() {
+  const saved = sessionStorage.getItem('reservation_return');
+  if (!saved) return '';
+  try {
+    const { productId, reservationFilter } = JSON.parse(saved);
+    return `<button class="btn btn-secondary btn-small" id="returnToReservationBtn" onclick="returnToReservation('${productId}', '${reservationFilter}')">← 返回预占明细</button>`;
+  } catch (e) { return ''; }
+}
+
+function returnToReservation(productId, reservationFilter) {
+  sessionStorage.removeItem('reservation_return');
+  currentReservationFilter = reservationFilter;
+  switchTab('products');
+  setTimeout(() => showReservationDetail(productId, null), 100);
 }
 
 function showToast(message, type = 'info') {

@@ -80,8 +80,8 @@ export class OrderService {
 
       db.addOrder(order);
 
-      orderEventService.recordEvent(orderId, OrderEventType.CREATED, `创建订单 ${orderNo}，金额 ¥${totalAmount}`, userId, { totalAmount, itemCount: orderItems.length });
-      orderEventService.recordEvent(orderId, OrderEventType.STOCK_RESERVED, `库存预占成功，${orderItems.map(i => `${i.productName}x${i.quantity}`).join('、')}`, 'system');
+      orderEventService.recordEvent(orderId, OrderEventType.CREATED, `创建订单 ${orderNo}，金额 ¥${totalAmount}`, userId, { amount: totalAmount, totalAmount, itemCount: orderItems.length });
+      orderEventService.recordEvent(orderId, OrderEventType.STOCK_RESERVED, `库存预占成功，${orderItems.map(i => `${i.productName}x${i.quantity}`).join('、')}`, 'system', { items: orderItems, productName: orderItems[0]?.productName, quantity: orderItems.reduce((s, i) => s + i.quantity, 0) });
 
       Logger.info(`Order created: ${orderNo}`, { userId, totalAmount });
 
@@ -165,7 +165,8 @@ export class OrderService {
         remark: '用户取消',
       });
 
-      orderEventService.recordEvent(orderId, OrderEventType.STOCK_RELEASED, '取消订单，库存预占释放', 'system');
+      const releasedQty = order.items.reduce((s, i) => s + i.quantity, 0);
+      orderEventService.recordEvent(orderId, OrderEventType.STOCK_RELEASED, '取消订单，库存预占释放', 'system', { productName: order.items[0]?.productName, quantity: releasedQty });
       orderEventService.recordEvent(orderId, OrderEventType.CANCELLED, '用户取消订单', userId);
 
       Logger.info(`Order cancelled: ${order.orderNo}`);
@@ -234,7 +235,8 @@ export class OrderService {
           remark: '超时自动关闭',
         });
 
-        orderEventService.recordEvent(orderId, OrderEventType.STOCK_RELEASED, '超时自动关闭，库存预占释放', 'system');
+        const autoReleasedQty = freshOrder.items.reduce((s, i) => s + i.quantity, 0);
+        orderEventService.recordEvent(orderId, OrderEventType.STOCK_RELEASED, '超时自动关闭，库存预占释放', 'system', { productName: freshOrder.items[0]?.productName, quantity: autoReleasedQty });
         orderEventService.recordEvent(orderId, OrderEventType.AUTO_CLOSED, '订单超时未支付，自动关闭', 'system');
 
         Logger.info(`Order auto-closed: ${freshOrder.orderNo}`);
@@ -260,8 +262,8 @@ export class OrderService {
         await this.updateOrderStatus(orderId, OrderStatus.PENDING_SHIPMENT, '支付成功');
         await stockService.confirmReservation(orderId);
 
-        orderEventService.recordEvent(orderId, OrderEventType.PAYMENT_SUCCESS, `支付成功，金额 ¥${order.totalAmount}`, 'payment', { amount: order.totalAmount });
-        orderEventService.recordEvent(orderId, OrderEventType.STOCK_CONFIRMED, '支付确认，库存预占转为已成交', 'system');
+        orderEventService.recordEvent(orderId, OrderEventType.PAYMENT_SUCCESS, `支付成功，金额 ¥${order.totalAmount}`, 'payment', { amount: order.totalAmount, paymentMethod: order.paymentMethod });
+        orderEventService.recordEvent(orderId, OrderEventType.STOCK_CONFIRMED, '支付确认，库存预占转为已成交', 'system', { productName: order.items[0]?.productName, quantity: order.items.reduce((s, i) => s + i.quantity, 0) });
 
         const finalOrder = await this.getOrder(orderId);
         return finalOrder;

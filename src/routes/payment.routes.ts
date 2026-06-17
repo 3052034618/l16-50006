@@ -100,10 +100,22 @@ router.get('/order/:orderId', async (req: Request, res: Response) => {
 
 router.get('/records', async (req: Request, res: Response) => {
   try {
-    const records = paymentService.getAllPaymentRecords();
+    const { status } = req.query;
+    const records = status
+      ? paymentService.getPaymentRecordsByStatus(status as string)
+      : paymentService.getAllPaymentRecords();
     res.json(success(records));
   } catch (e: any) {
     res.status(500).json(error('获取支付记录列表失败', 500));
+  }
+});
+
+router.get('/summary', async (_req: Request, res: Response) => {
+  try {
+    const summary = paymentService.getPaymentSummary();
+    res.json(success(summary));
+  } catch (e: any) {
+    res.status(500).json(error('获取支付汇总失败', 500));
   }
 });
 

@@ -274,6 +274,14 @@ export class PaymentService {
   getAllPaymentRecords(): PaymentRecord[] {
     return db.getAllPaymentRecords();
   }
+
+  getPaymentRecordsByStatus(status: string): PaymentRecord[] {
+    return db.getPaymentRecordsByStatus(status);
+  }
+
+  getPaymentSummary(): any {
+    return db.getPaymentSummary();
+  }
 }
 
 export const paymentService = new PaymentService();

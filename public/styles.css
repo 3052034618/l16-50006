@@ -1165,4 +1165,314 @@ h2 {
   .progress-step span {
     font-size: 10px;
   }
+
+  .payment-dashboard-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .amount-reconcile-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .amount-arrow {
+    display: none;
+  }
+
+  .category-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .timeline-filter-bar {
+    flex-wrap: wrap;
+  }
+}
+
+.timeline-filter-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.timeline-filter-btn {
+  padding: 6px 16px;
+  border: 1px solid #ddd;
+  background: white;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #666;
+  transition: all 0.2s;
+}
+
+.timeline-filter-btn:hover {
+  border-color: #667eea;
+  color: #667eea;
+}
+
+.timeline-filter-btn.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-color: transparent;
+}
+
+.event-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 4px;
+}
+
+.event-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.event-badge.amount {
+  background: #fef5e7;
+  color: #e67e22;
+}
+
+.event-badge.qty {
+  background: #eaf2f8;
+  color: #3498db;
+}
+
+.event-badge.stock {
+  background: #e8f8f5;
+  color: #16a085;
+}
+
+.event-badge.refund {
+  background: #fadbd8;
+  color: #c0392b;
+}
+
+.event-badge.pay-method {
+  background: #f4ecf7;
+  color: #8e44ad;
+}
+
+.payment-dashboard {
+  margin-bottom: 24px;
+}
+
+.payment-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+
+.dash-card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  cursor: pointer;
+  transition: all 0.25s;
+  border: 2px solid transparent;
+  text-align: center;
+}
+
+.dash-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+}
+
+.dash-card.active {
+  border-color: #667eea;
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.25);
+}
+
+.dash-icon {
+  font-size: 24px;
+  margin-bottom: 4px;
+}
+
+.dash-label {
+  font-size: 12px;
+  color: #888;
+  margin-bottom: 6px;
+}
+
+.dash-count {
+  font-size: 18px;
+  font-weight: 700;
+  color: #2c3e50;
+  margin-bottom: 2px;
+}
+
+.dash-amount {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e74c3c;
+}
+
+.dash-card.success .dash-count,
+.dash-card.success .dash-amount { color: #27ae60; }
+.dash-card.refunded .dash-count,
+.dash-card.refunded .dash-amount { color: #e67e22; }
+.dash-card.processing .dash-count,
+.dash-card.processing .dash-amount { color: #3498db; }
+.dash-card.failed .dash-count,
+.dash-card.failed .dash-amount { color: #95a5a6; }
+.dash-card.total .dash-count,
+.dash-card.total .dash-amount { color: #2c3e50; }
+
+.amount-reconcile-grid {
+  display: grid;
+  grid-template-columns: 1fr 40px 1fr 40px 1fr;
+  gap: 12px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.amount-card {
+  background: #f8f9fa;
+  border-radius: 10px;
+  padding: 16px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.amount-card.original {
+  border: 2px solid #eafaf1;
+  background: #f8fdf9;
+}
+
+.amount-card.refund {
+  border: 2px solid #fadbd8;
+  background: #fef8f7;
+}
+
+.amount-card.diff {
+  border: 2px solid #eaf2f8;
+  background: #f6f9fd;
+}
+
+.amount-label {
+  font-size: 12px;
+  color: #888;
+}
+
+.amount-value {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.amount-card.original .amount-value { color: #27ae60; }
+.amount-card.refund .amount-value { color: #e74c3c; }
+.amount-card.diff .amount-value { color: #667eea; }
+
+.amount-hint {
+  font-size: 11px;
+  color: #aaa;
+}
+
+.amount-arrow {
+  font-size: 28px;
+  font-weight: 700;
+  color: #ccc;
+  text-align: center;
+}
+
+.pay-subcard {
+  background: #f8f9fa;
+  border-radius: 10px;
+  padding: 14px;
+  margin-top: 8px;
+  border-left: 4px solid #667eea;
+}
+
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.cat-stat {
+  background: #f8f9fa;
+  border-radius: 10px;
+  padding: 12px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.cat-stat:hover {
+  border-color: #667eea;
+}
+
+.cat-stat.active {
+  border-color: #667eea;
+  background: #f4f6ff;
+}
+
+.cat-count {
+  font-size: 16px;
+  font-weight: 700;
+  color: #2c3e50;
+}
+
+.cat-label {
+  font-size: 12px;
+  color: #888;
+}
+
+.cat-qty {
+  font-size: 13px;
+  font-weight: 600;
+  color: #667eea;
+}
+
+.reservation-item.pending {
+  border-left: 4px solid #e67e22;
+}
+.reservation-item.confirmed {
+  border-left: 4px solid #27ae60;
+}
+.reservation-item.cancel {
+  border-left: 4px solid #95a5a6;
+}
+.reservation-item.timeout {
+  border-left: 4px solid #e74c3c;
+}
+
+.reservation-cat-tag {
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.reservation-cat-tag.pending {
+  background: #fef5e7;
+  color: #e67e22;
+}
+.reservation-cat-tag.confirmed {
+  background: #eafaf1;
+  color: #27ae60;
+}
+.reservation-cat-tag.cancel {
+  background: #f5f5f5;
+  color: #7f8c8d;
+}
+.reservation-cat-tag.timeout {
+  background: #fadbd8;
+  color: #c0392b;
+}
+
+.reservation-order:hover {
+  text-decoration: underline;
 }

@@ -65,10 +65,18 @@ router.get('/:productId/stock', async (req: Request, res: Response) => {
 router.get('/:productId/reservations', (req: Request, res: Response) => {
   try {
     const { productId } = req.params;
-    const reservations = db.getReservationsByProductId(productId);
-    const active = reservations.filter(r => r.status === 'ACTIVE');
-    const confirmed = reservations.filter(r => r.status === 'CONFIRMED');
-    const released = reservations.filter(r => r.status === 'RELEASED');
+    const { category } = req.query;
+    const reservations = db.getReservationsByProductIdWithOrder(productId);
+    const filtered = category
+      ? reservations.filter(r => r.reservationCategory === category)
+      : reservations;
+    const active = filtered.filter(r => r.status === 'ACTIVE');
+    const confirmed = filtered.filter(r => r.status === 'CONFIRMED');
+    const released = filtered.filter(r => r.status === 'RELEASED');
+    const pendingPay = reservations.filter(r => r.reservationCategory === 'PENDING_PAYMENT');
+    const confirmedTrade = reservations.filter(r => r.reservationCategory === 'CONFIRMED');
+    const cancelReleased = reservations.filter(r => r.reservationCategory === 'CANCEL_RELEASED');
+    const timeoutReleased = reservations.filter(r => r.reservationCategory === 'TIMEOUT_RELEASED');
     res.json(success({
       productId,
       summary: {
@@ -79,7 +87,13 @@ router.get('/:productId/reservations', (req: Request, res: Response) => {
         releasedCount: released.length,
         releasedQuantity: released.reduce((s, r) => s + r.quantity, 0),
       },
-      reservations,
+      categorySummary: {
+        pendingPayment: { count: pendingPay.length, quantity: pendingPay.reduce((s, r) => s + r.quantity, 0) },
+        confirmedTrade: { count: confirmedTrade.length, quantity: confirmedTrade.reduce((s, r) => s + r.quantity, 0) },
+        cancelReleased: { count: cancelReleased.length, quantity: cancelReleased.reduce((s, r) => s + r.quantity, 0) },
+        timeoutReleased: { count: timeoutReleased.length, quantity: timeoutReleased.reduce((s, r) => s + r.quantity, 0) },
+      },
+      reservations: filtered,
     }));
   } catch (e: any) {
     res.status(500).json(error('获取预占明细失败', 500));

@@ -194,10 +194,64 @@ class InMemoryStore {
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
 
+  getPaymentRecordsByStatus(status: string): PaymentRecord[] {
+    return Array.from(this.paymentRecords.values())
+      .filter(p => status === 'ALL' ? true : p.status === status)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  getPaymentSummary(): {
+    total: { count: number; amount: number };
+    paid: { count: number; amount: number };
+    refunding: { count: number; amount: number };
+    refunded: { count: number; amount: number };
+    failed: { count: number; amount: number };
+  } {
+    const all = Array.from(this.paymentRecords.values());
+    const sumBy = (filter: (p: PaymentRecord) => boolean) =>
+      all.filter(filter).reduce((s, p) => ({ count: s.count + 1, amount: s.amount + p.amount }),
+        { count: 0, amount: 0 });
+    return {
+      total: sumBy(() => true),
+      paid: sumBy(p => p.status === 'PAID'),
+      refunding: sumBy(p => p.status === 'REFUNDING'),
+      refunded: sumBy(p => p.status === 'REFUNDED'),
+      failed: sumBy(p => p.status === 'FAILED'),
+    };
+  }
+
   getReservationsByProductId(productId: string): StockReservation[] {
     return Array.from(this.reservations.values())
       .filter(r => r.productId === productId)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  getReservationsByProductIdWithOrder(productId: string): Array<StockReservation & {
+    orderStatus?: string;
+    orderNo?: string;
+    reservationCategory?: 'PENDING_PAYMENT' | 'CONFIRMED' | 'CANCEL_RELEASED' | 'TIMEOUT_RELEASED';
+  }> {
+    return this.getReservationsByProductId(productId).map(r => {
+      const order = this.getOrder(r.orderId);
+      let category: 'PENDING_PAYMENT' | 'CONFIRMED' | 'CANCEL_RELEASED' | 'TIMEOUT_RELEASED' | undefined;
+      if (r.status === 'ACTIVE') {
+        category = 'PENDING_PAYMENT';
+      } else if (r.status === 'CONFIRMED') {
+        category = 'CONFIRMED';
+      } else if (r.status === 'RELEASED') {
+        if (order?.status === 'CLOSED' && order?.remark === '超时自动关闭') {
+          category = 'TIMEOUT_RELEASED';
+        } else {
+          category = 'CANCEL_RELEASED';
+        }
+      }
+      return {
+        ...r,
+        orderStatus: order?.status,
+        orderNo: order?.orderNo,
+        reservationCategory: category,
+      };
+    });
   }
 
   getAllReservations(): StockReservation[] {

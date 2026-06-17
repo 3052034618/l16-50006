@@ -11,11 +11,11 @@ export const config = {
     payExpireMinutes: 30,
   },
   order: {
-    autoCloseMinutes: 30,
+    autoCloseMinutes: 1,
     autoConfirmDays: 7,
   },
   stock: {
-    reservationExpireSeconds: 1800,
+    reservationExpireSeconds: 120,
     lockKeyPrefix: 'stock:lock:',
     reservationKeyPrefix: 'stock:reservation:',
   },

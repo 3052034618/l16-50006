@@ -241,6 +241,7 @@ function renderOrders() {
       </div>
       <div class="order-info">
         <span>下单时间: ${formatDate(order.createdAt)}</span>
+        <span>支付状态: ${paymentStatusMap[order.paymentStatus] || order.paymentStatus}</span>
         <span>商品数: ${order.items.length}件</span>
         <span class="order-amount">¥${order.totalAmount.toLocaleString()}</span>
       </div>

@@ -9,6 +9,13 @@ import {
 import { generateId, generateOrderNo, BusinessError, Logger } from '../utils';
 import { orderStateMachine } from './state-machine.service';
 import { stockService } from './stock.service';
+import { withLock } from './lock.service';
+
+const ORDER_LOCK_PREFIX = 'order:';
+
+function withOrderLock<T>(orderId: string, fn: () => Promise<T>): Promise<T> {
+  return withLock(`${ORDER_LOCK_PREFIX}${orderId}`, fn, 10000, 3, 200);
+}
 
 export class OrderService {
   async createOrder(
@@ -132,25 +139,31 @@ export class OrderService {
   }
 
   async cancelOrder(orderId: string, userId: string): Promise<Order> {
-    const order = await this.getOrder(orderId);
+    return await withOrderLock(orderId, async () => {
+      const order = await this.getOrder(orderId);
 
-    if (order.userId !== userId) {
-      throw new BusinessError('无权操作该订单', 403);
-    }
+      if (order.userId !== userId) {
+        throw new BusinessError('无权操作该订单', 403);
+      }
 
-    orderStateMachine.assertCanDoAction(order.status, 'cancel');
+      orderStateMachine.assertCanDoAction(order.status, 'cancel');
 
-    await stockService.releaseReservation(orderId);
+      if (order.status !== OrderStatus.PENDING_PAYMENT) {
+        throw new BusinessError(`订单状态为${order.status}，无法取消`, 400);
+      }
 
-    const updated = db.updateOrder(orderId, {
-      status: OrderStatus.CLOSED,
-      paymentStatus: PaymentStatus.UNPAID,
-      remark: '用户取消',
+      await stockService.releaseReservation(orderId);
+
+      const updated = db.updateOrder(orderId, {
+        status: OrderStatus.CLOSED,
+        paymentStatus: PaymentStatus.UNPAID,
+        remark: '用户取消',
+      });
+
+      Logger.info(`Order cancelled: ${order.orderNo}`);
+
+      return updated!;
     });
-
-    Logger.info(`Order cancelled: ${order.orderNo}`);
-
-    return updated!;
   }
 
   async shipOrder(
@@ -190,24 +203,28 @@ export class OrderService {
   async closeExpiredOrder(orderId: string): Promise<Order | null> {
     const order = db.getOrder(orderId);
     if (!order) return null;
-
-    if (order.status !== OrderStatus.PENDING_PAYMENT) {
-      return null;
-    }
+    if (order.status !== OrderStatus.PENDING_PAYMENT) return null;
 
     try {
-      orderStateMachine.assertCanDoAction(order.status, 'cancel');
+      return await withOrderLock(orderId, async () => {
+        const freshOrder = await this.getOrder(orderId);
+        if (freshOrder.status !== OrderStatus.PENDING_PAYMENT) {
+          return null;
+        }
 
-      await stockService.releaseReservation(orderId);
+        orderStateMachine.assertCanDoAction(freshOrder.status, 'cancel');
 
-      const closed = db.updateOrder(orderId, {
-        status: OrderStatus.CLOSED,
-        paymentStatus: PaymentStatus.UNPAID,
-        remark: '超时自动关闭',
+        await stockService.releaseReservation(orderId);
+
+        const closed = db.updateOrder(orderId, {
+          status: OrderStatus.CLOSED,
+          paymentStatus: PaymentStatus.UNPAID,
+          remark: '超时自动关闭',
+        });
+
+        Logger.info(`Order auto-closed: ${freshOrder.orderNo}`);
+        return closed!;
       });
-
-      Logger.info(`Order auto-closed: ${order.orderNo}`);
-      return closed!;
     } catch (e) {
       Logger.error(`Failed to close expired order ${orderId}`, e);
       return null;
@@ -215,20 +232,32 @@ export class OrderService {
   }
 
   async updatePaymentStatus(orderId: string, paymentStatus: PaymentStatus): Promise<Order> {
-    const order = await this.getOrder(orderId);
+    return await withOrderLock(orderId, async () => {
+      const order = await this.getOrder(orderId);
 
-    if (paymentStatus === PaymentStatus.PAID && order.status !== OrderStatus.PENDING_PAYMENT) {
-      throw new BusinessError(`订单状态为${order.status}，无法标记为已支付`, 400);
-    }
+      if (paymentStatus === PaymentStatus.PAID) {
+        if (order.status !== OrderStatus.PENDING_PAYMENT) {
+          throw new BusinessError(`订单状态为${order.status}，无法标记为已支付`, 400);
+        }
 
-    const updated = db.updateOrder(orderId, { paymentStatus });
+        const updated = db.updateOrder(orderId, { paymentStatus });
 
-    if (paymentStatus === PaymentStatus.PAID && order.status === OrderStatus.PENDING_PAYMENT) {
-      await this.updateOrderStatus(orderId, OrderStatus.PENDING_SHIPMENT, '支付成功');
-      await stockService.confirmReservation(orderId);
-    }
+        await this.updateOrderStatus(orderId, OrderStatus.PENDING_SHIPMENT, '支付成功');
+        await stockService.confirmReservation(orderId);
 
-    return updated!;
+        const finalOrder = await this.getOrder(orderId);
+        return finalOrder;
+      }
+
+      if (paymentStatus === PaymentStatus.REFUNDED) {
+        db.updateOrder(orderId, { paymentStatus: PaymentStatus.REFUNDED });
+        const finalOrder = await this.getOrder(orderId);
+        return finalOrder;
+      }
+
+      const updated = db.updateOrder(orderId, { paymentStatus });
+      return updated!;
+    });
   }
 }
 

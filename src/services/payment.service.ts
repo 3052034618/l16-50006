@@ -126,15 +126,21 @@ export class PaymentService {
           return { success: false, message: '订单状态已变更，无法完成支付' };
         }
 
-        db.updatePaymentRecord(outTradeNo, {
-          status: PaymentStatus.PAID,
-          transactionId,
-          paidAt: new Date(),
-        });
+        try {
+          await orderService.updatePaymentStatus(paymentRecord.orderId, PaymentStatus.PAID);
 
-        await orderService.updatePaymentStatus(paymentRecord.orderId, PaymentStatus.PAID);
+          db.updatePaymentRecord(outTradeNo, {
+            status: PaymentStatus.PAID,
+            transactionId,
+            paidAt: new Date(),
+          });
 
-        Logger.info(`Payment success: ${outTradeNo}`, { transactionId });
+          Logger.info(`Payment success: ${outTradeNo}`, { transactionId });
+        } catch (e) {
+          const err = e as Error;
+          Logger.warn(`Payment callback failed at updatePaymentStatus: ${err.message}`);
+          return { success: false, message: err.message || '支付处理失败' };
+        }
       }
     } else if (tradeStatus === 'TRADE_CLOSED') {
       db.updatePaymentRecord(outTradeNo, {

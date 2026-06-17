@@ -14,6 +14,14 @@ const statusMap = {
   'REFUNDED': '已退款'
 };
 
+const paymentStatusMap = {
+  'UNPAID': '未支付',
+  'PAID': '已支付',
+  'REFUNDING': '退款中',
+  'REFUNDED': '已退款',
+  'FAILED': '支付失败'
+};
+
 const refundStatusMap = {
   'PENDING': '待处理',
   'APPROVED': '已同意',
@@ -314,7 +322,7 @@ function renderOrderDetail() {
         </div>
         <div class="detail-row">
           <span class="detail-label">支付状态</span>
-          <span class="detail-value">${order.paymentStatus}</span>
+          <span class="detail-value">${paymentStatusMap[order.paymentStatus] || order.paymentStatus}</span>
         </div>
         <div class="detail-row">
           <span class="detail-label">下单时间</span>

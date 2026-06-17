@@ -20,16 +20,26 @@ export class OrderService {
       throw new BusinessError('订单项不能为空', 400);
     }
 
+    const mergedMap = new Map<string, number>();
+    for (const item of items) {
+      if (item.quantity <= 0) {
+        throw new BusinessError('商品数量必须大于0', 400);
+      }
+      mergedMap.set(item.productId, (mergedMap.get(item.productId) || 0) + item.quantity);
+    }
+
+    const mergedItems = Array.from(mergedMap.entries()).map(([productId, quantity]) => ({
+      productId,
+      quantity,
+    }));
+
     const orderItems: OrderItem[] = [];
     let totalAmount = 0;
 
-    for (const item of items) {
+    for (const item of mergedItems) {
       const product = db.getProduct(item.productId);
       if (!product) {
         throw new BusinessError(`商品不存在: ${item.productId}`, 404);
-      }
-      if (item.quantity <= 0) {
-        throw new BusinessError(`商品数量必须大于0: ${product.name}`, 400);
       }
       orderItems.push({
         productId: product.id,
@@ -43,7 +53,7 @@ export class OrderService {
     const orderId = generateId();
     const orderNo = generateOrderNo();
 
-    const reservations = await stockService.reserveStock(orderId, items);
+    const reservations = await stockService.reserveStock(orderId, mergedItems);
 
     try {
       const order: Order = {
@@ -130,12 +140,17 @@ export class OrderService {
 
     orderStateMachine.assertCanDoAction(order.status, 'cancel');
 
-    const targetStatus = OrderStatus.CLOSED;
-    const updated = await this.updateOrderStatus(orderId, targetStatus, '用户取消');
-
     await stockService.releaseReservation(orderId);
 
-    return updated;
+    const updated = db.updateOrder(orderId, {
+      status: OrderStatus.CLOSED,
+      paymentStatus: PaymentStatus.UNPAID,
+      remark: '用户取消',
+    });
+
+    Logger.info(`Order cancelled: ${order.orderNo}`);
+
+    return updated!;
   }
 
   async shipOrder(
@@ -182,10 +197,17 @@ export class OrderService {
 
     try {
       orderStateMachine.assertCanDoAction(order.status, 'cancel');
-      const updated = await this.updateOrderStatus(orderId, OrderStatus.CLOSED, '超时自动关闭');
+
       await stockService.releaseReservation(orderId);
+
+      const closed = db.updateOrder(orderId, {
+        status: OrderStatus.CLOSED,
+        paymentStatus: PaymentStatus.UNPAID,
+        remark: '超时自动关闭',
+      });
+
       Logger.info(`Order auto-closed: ${order.orderNo}`);
-      return updated;
+      return closed!;
     } catch (e) {
       Logger.error(`Failed to close expired order ${orderId}`, e);
       return null;
@@ -194,6 +216,11 @@ export class OrderService {
 
   async updatePaymentStatus(orderId: string, paymentStatus: PaymentStatus): Promise<Order> {
     const order = await this.getOrder(orderId);
+
+    if (paymentStatus === PaymentStatus.PAID && order.status !== OrderStatus.PENDING_PAYMENT) {
+      throw new BusinessError(`订单状态为${order.status}，无法标记为已支付`, 400);
+    }
+
     const updated = db.updateOrder(orderId, { paymentStatus });
 
     if (paymentStatus === PaymentStatus.PAID && order.status === OrderStatus.PENDING_PAYMENT) {

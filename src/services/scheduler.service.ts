@@ -3,7 +3,6 @@ import { db } from '../store';
 import { config } from '../config';
 import { Logger, addMinutes } from '../utils';
 import { orderService } from './order.service';
-import { stockService } from './stock.service';
 import { OrderStatus } from '../types';
 
 export class SchedulerService {
@@ -14,7 +13,6 @@ export class SchedulerService {
     if (this.isRunning) return;
 
     this.startOrderAutoCloseJob();
-    this.startStockReservationCleanupJob();
     this.startAutoConfirmReceiveJob();
 
     this.isRunning = true;
@@ -38,21 +36,6 @@ export class SchedulerService {
     });
     this.jobs.push(job);
     Logger.info('Order auto-close job scheduled (every minute)');
-  }
-
-  private startStockReservationCleanupJob(): void {
-    const job = schedule.scheduleJob('*/5 * * * *', async () => {
-      try {
-        const count = await stockService.releaseExpiredReservations();
-        if (count > 0) {
-          Logger.info(`Stock reservation cleanup job completed, released ${count} reservations`);
-        }
-      } catch (e) {
-        Logger.error('Stock reservation cleanup job failed', e);
-      }
-    });
-    this.jobs.push(job);
-    Logger.info('Stock reservation cleanup job scheduled (every 5 minutes)');
   }
 
   private startAutoConfirmReceiveJob(): void {
@@ -124,10 +107,6 @@ export class SchedulerService {
 
   async runCloseExpiredOrdersNow(): Promise<number> {
     return this.closeExpiredOrders();
-  }
-
-  async runStockCleanupNow(): Promise<number> {
-    return stockService.releaseExpiredReservations();
   }
 }
 

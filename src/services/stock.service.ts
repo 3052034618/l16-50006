@@ -17,11 +17,22 @@ export class StockService {
     orderId: string,
     items: { productId: string; quantity: number }[]
   ): Promise<StockReservation[]> {
-    const reservations: StockReservation[] = [];
-
     for (const item of items) {
-      const reservation = await this.reserveSingleProduct(orderId, item.productId, item.quantity);
-      reservations.push(reservation);
+      await this.preCheckStock(item.productId, item.quantity);
+    }
+
+    const reservations: StockReservation[] = [];
+    const reservedKeys: string[] = [];
+
+    try {
+      for (const item of items) {
+        const reservation = await this.reserveSingleProduct(orderId, item.productId, item.quantity);
+        reservations.push(reservation);
+        reservedKeys.push(item.productId);
+      }
+    } catch (e) {
+      await this.rollbackReservations(reservations);
+      throw e;
     }
 
     Logger.info(`Stock reserved for order ${orderId}`, {
@@ -29,6 +40,22 @@ export class StockService {
     });
 
     return reservations;
+  }
+
+  private async preCheckStock(productId: string, quantity: number): Promise<void> {
+    await withLock(
+      `product:${productId}`,
+      async () => {
+        const product = db.getProduct(productId);
+        if (!product) {
+          throw new BusinessError(`商品不存在: ${productId}`, 404);
+        }
+        if (product.stock < quantity) {
+          throw new BusinessError(`商品库存不足: ${product.name}，库存${product.stock}，需要${quantity}`, 409);
+        }
+      },
+      5000
+    );
   }
 
   private async reserveSingleProduct(
@@ -45,7 +72,7 @@ export class StockService {
         }
 
         if (product.stock < quantity) {
-          throw new BusinessError(`商品库存不足: ${product.name}`, 409);
+          throw new BusinessError(`商品库存不足: ${product.name}，库存${product.stock}，需要${quantity}`, 409);
         }
 
         db.updateProduct(productId, { stock: product.stock - quantity });

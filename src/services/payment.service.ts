@@ -20,6 +20,19 @@ export class PaymentService {
   ): Promise<{ paymentRecord: PaymentRecord; payUrl: string }> {
     const order = await orderService.getOrder(orderId);
 
+    if (order.status === OrderStatus.CLOSED) {
+      throw new BusinessError('订单已关闭，无法支付', 400);
+    }
+    if (order.status === OrderStatus.REFUNDING) {
+      throw new BusinessError('订单退款中，无法支付', 400);
+    }
+    if (order.status === OrderStatus.REFUNDED) {
+      throw new BusinessError('订单已退款，无法支付', 400);
+    }
+    if (order.status !== OrderStatus.PENDING_PAYMENT) {
+      throw new BusinessError(`订单当前状态${order.status}不允许支付`, 400);
+    }
+
     if (order.paymentStatus === PaymentStatus.PAID) {
       throw new BusinessError('订单已支付', 400);
     }
@@ -107,6 +120,12 @@ export class PaymentService {
 
     if (tradeStatus === 'TRADE_SUCCESS' || tradeStatus === 'TRADE_FINISHED') {
       if (paymentRecord.status !== PaymentStatus.PAID) {
+        const order = db.getOrder(paymentRecord.orderId);
+        if (!order || order.status !== OrderStatus.PENDING_PAYMENT) {
+          Logger.warn(`Payment callback rejected: order ${paymentRecord.orderId} status is ${order?.status}, not PENDING_PAYMENT`);
+          return { success: false, message: '订单状态已变更，无法完成支付' };
+        }
+
         db.updatePaymentRecord(outTradeNo, {
           status: PaymentStatus.PAID,
           transactionId,
@@ -134,6 +153,11 @@ export class PaymentService {
 
     if (paymentRecord.status !== PaymentStatus.UNPAID) {
       throw new BusinessError('该支付已处理', 400);
+    }
+
+    const order = db.getOrder(paymentRecord.orderId);
+    if (!order || order.status !== OrderStatus.PENDING_PAYMENT) {
+      throw new BusinessError(`订单状态不允许支付(${order?.status || '不存在'})，可能已关闭或已支付`, 400);
     }
 
     const transactionId = `SANDBOX_${generateId()}`;
@@ -221,6 +245,8 @@ export class PaymentService {
       });
 
       try {
+        await orderService.updatePaymentStatus(paymentRecord.orderId, PaymentStatus.REFUNDED);
+
         const order = await orderService.getOrder(paymentRecord.orderId);
         if (order.status === OrderStatus.REFUNDING) {
           await orderService.updateOrderStatus(paymentRecord.orderId, OrderStatus.REFUNDED, '退款完成');

@@ -270,6 +270,10 @@ export class PaymentService {
   getPaymentRecordsByOrderId(orderId: string): PaymentRecord[] {
     return db.getPaymentRecordsByOrderId(orderId);
   }
+
+  getAllPaymentRecords(): PaymentRecord[] {
+    return db.getAllPaymentRecords();
+  }
 }
 
 export const paymentService = new PaymentService();

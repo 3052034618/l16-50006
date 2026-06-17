@@ -104,3 +104,30 @@ export interface LogisticsInfo {
   status: string;
   traces: LogisticsTrace[];
 }
+
+export enum OrderEventType {
+  CREATED = 'CREATED',
+  PAYMENT_SUCCESS = 'PAYMENT_SUCCESS',
+  PAYMENT_FAILED = 'PAYMENT_FAILED',
+  SHIPPED = 'SHIPPED',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+  AUTO_CLOSED = 'AUTO_CLOSED',
+  REFUND_APPLIED = 'REFUND_APPLIED',
+  REFUND_APPROVED = 'REFUND_APPROVED',
+  REFUND_REJECTED = 'REFUND_REJECTED',
+  REFUND_COMPLETED = 'REFUND_COMPLETED',
+  STOCK_RESERVED = 'STOCK_RESERVED',
+  STOCK_RELEASED = 'STOCK_RELEASED',
+  STOCK_CONFIRMED = 'STOCK_CONFIRMED',
+}
+
+export interface OrderEvent {
+  id: string;
+  orderId: string;
+  eventType: OrderEventType;
+  description: string;
+  operator: string;
+  metadata?: Record<string, any>;
+  createdAt: Date;
+}

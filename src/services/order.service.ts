@@ -10,6 +10,8 @@ import { generateId, generateOrderNo, BusinessError, Logger } from '../utils';
 import { orderStateMachine } from './state-machine.service';
 import { stockService } from './stock.service';
 import { withLock } from './lock.service';
+import { orderEventService } from './order-event.service';
+import { OrderEventType } from '../types';
 
 const ORDER_LOCK_PREFIX = 'order:';
 
@@ -77,6 +79,9 @@ export class OrderService {
       };
 
       db.addOrder(order);
+
+      orderEventService.recordEvent(orderId, OrderEventType.CREATED, `创建订单 ${orderNo}，金额 ¥${totalAmount}`, userId, { totalAmount, itemCount: orderItems.length });
+      orderEventService.recordEvent(orderId, OrderEventType.STOCK_RESERVED, `库存预占成功，${orderItems.map(i => `${i.productName}x${i.quantity}`).join('、')}`, 'system');
 
       Logger.info(`Order created: ${orderNo}`, { userId, totalAmount });
 
@@ -160,6 +165,9 @@ export class OrderService {
         remark: '用户取消',
       });
 
+      orderEventService.recordEvent(orderId, OrderEventType.STOCK_RELEASED, '取消订单，库存预占释放', 'system');
+      orderEventService.recordEvent(orderId, OrderEventType.CANCELLED, '用户取消订单', userId);
+
       Logger.info(`Order cancelled: ${order.orderNo}`);
 
       return updated!;
@@ -181,6 +189,8 @@ export class OrderService {
       logisticsCompany,
     });
 
+    orderEventService.recordEvent(orderId, OrderEventType.SHIPPED, `已发货，${logisticsCompany} 单号 ${trackingNumber}`, 'merchant', { trackingNumber, logisticsCompany });
+
     Logger.info(`Order shipped: ${order.orderNo}`, { trackingNumber, logisticsCompany });
 
     return updated!;
@@ -196,6 +206,8 @@ export class OrderService {
     orderStateMachine.assertCanDoAction(order.status, 'confirm');
 
     const updated = await this.updateOrderStatus(orderId, OrderStatus.COMPLETED, '用户确认收货');
+
+    orderEventService.recordEvent(orderId, OrderEventType.COMPLETED, '用户确认收货', userId);
 
     return updated;
   }
@@ -222,6 +234,9 @@ export class OrderService {
           remark: '超时自动关闭',
         });
 
+        orderEventService.recordEvent(orderId, OrderEventType.STOCK_RELEASED, '超时自动关闭，库存预占释放', 'system');
+        orderEventService.recordEvent(orderId, OrderEventType.AUTO_CLOSED, '订单超时未支付，自动关闭', 'system');
+
         Logger.info(`Order auto-closed: ${freshOrder.orderNo}`);
         return closed!;
       });
@@ -244,6 +259,9 @@ export class OrderService {
 
         await this.updateOrderStatus(orderId, OrderStatus.PENDING_SHIPMENT, '支付成功');
         await stockService.confirmReservation(orderId);
+
+        orderEventService.recordEvent(orderId, OrderEventType.PAYMENT_SUCCESS, `支付成功，金额 ¥${order.totalAmount}`, 'payment', { amount: order.totalAmount });
+        orderEventService.recordEvent(orderId, OrderEventType.STOCK_CONFIRMED, '支付确认，库存预占转为已成交', 'system');
 
         const finalOrder = await this.getOrder(orderId);
         return finalOrder;

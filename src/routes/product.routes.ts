@@ -24,6 +24,15 @@ router.get('/', (_req: Request, res: Response) => {
   res.json(success(products));
 });
 
+router.get('/stock/reservations', (_req: Request, res: Response) => {
+  try {
+    const reservations = db.getAllReservations();
+    res.json(success(reservations));
+  } catch (e: any) {
+    res.status(500).json(error('获取预占明细失败', 500));
+  }
+});
+
 router.get('/:productId', (req: Request, res: Response) => {
   try {
     const { productId } = req.params;
@@ -50,6 +59,30 @@ router.get('/:productId/stock', async (req: Request, res: Response) => {
     } else {
       res.status(500).json(error('获取库存失败', 500));
     }
+  }
+});
+
+router.get('/:productId/reservations', (req: Request, res: Response) => {
+  try {
+    const { productId } = req.params;
+    const reservations = db.getReservationsByProductId(productId);
+    const active = reservations.filter(r => r.status === 'ACTIVE');
+    const confirmed = reservations.filter(r => r.status === 'CONFIRMED');
+    const released = reservations.filter(r => r.status === 'RELEASED');
+    res.json(success({
+      productId,
+      summary: {
+        activeCount: active.length,
+        activeQuantity: active.reduce((s, r) => s + r.quantity, 0),
+        confirmedCount: confirmed.length,
+        confirmedQuantity: confirmed.reduce((s, r) => s + r.quantity, 0),
+        releasedCount: released.length,
+        releasedQuantity: released.reduce((s, r) => s + r.quantity, 0),
+      },
+      reservations,
+    }));
+  } catch (e: any) {
+    res.status(500).json(error('获取预占明细失败', 500));
   }
 });
 

@@ -1,9 +1,10 @@
 import { db } from '../store';
-import { RefundRecord, OrderStatus, PaymentStatus } from '../types';
+import { RefundRecord, OrderStatus, PaymentStatus, OrderEventType } from '../types';
 import { generateId, BusinessError, Logger } from '../utils';
 import { orderService } from './order.service';
 import { paymentService } from './payment.service';
 import { orderStateMachine } from './state-machine.service';
+import { orderEventService } from './order-event.service';
 
 export class RefundService {
   async applyRefund(orderId: string, userId: string, reason: string): Promise<RefundRecord> {
@@ -37,6 +38,8 @@ export class RefundService {
 
     await orderService.updateOrderStatus(orderId, OrderStatus.REFUNDING, `用户申请退款: ${reason}`);
 
+    orderEventService.recordEvent(orderId, OrderEventType.REFUND_APPLIED, `用户申请退款，原因：${reason}，金额 ¥${order.totalAmount}`, userId, { refundId: refundRecord.id, amount: order.totalAmount });
+
     Logger.info(`Refund application submitted: ${refundRecord.id}`, { orderId, amount: order.totalAmount });
 
     return refundRecord;
@@ -56,6 +59,8 @@ export class RefundService {
       status: 'APPROVED',
       approveTime: new Date(),
     });
+
+    orderEventService.recordEvent(refundRecord.orderId, OrderEventType.REFUND_APPROVED, `退款申请已审批通过`, 'merchant', { refundId });
 
     const paymentRecords = paymentService.getPaymentRecordsByOrderId(refundRecord.orderId);
     const paidRecord = paymentRecords.find(p => p.status === PaymentStatus.PAID || p.status === PaymentStatus.REFUNDING);
@@ -80,6 +85,7 @@ export class RefundService {
               status: 'COMPLETED',
               refundTime: new Date(),
             });
+            orderEventService.recordEvent(refundRecord.orderId, OrderEventType.REFUND_COMPLETED, `退款完成，金额 ¥${refundRecord.amount}`, 'payment', { refundId, amount: refundRecord.amount });
           }
         }, 1000);
 
@@ -108,6 +114,8 @@ export class RefundService {
     db.updateRefundRecord(refundId, {
       status: 'REJECTED',
     });
+
+    orderEventService.recordEvent(refundRecord.orderId, OrderEventType.REFUND_REJECTED, `退款申请被拒绝，原因：${reason}`, 'merchant', { refundId, reason });
 
     const order = await orderService.getOrder(refundRecord.orderId);
 
@@ -148,6 +156,13 @@ export class RefundService {
       throw new BusinessError('退款记录不存在', 404);
     }
     return record;
+  }
+
+  async getAllRefundRecords(status?: string): Promise<RefundRecord[]> {
+    if (status) {
+      return db.getRefundRecordsByStatus(status);
+    }
+    return db.getAllRefundRecords();
   }
 }
 

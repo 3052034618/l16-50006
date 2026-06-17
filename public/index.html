@@ -10,7 +10,7 @@
   <div class="container">
     <header>
       <h1>电商订单生命周期管理系统</h1>
-      <p class="subtitle">库存预占 · 分布式锁 · 状态机 · 支付沙箱 · 退款流程 · 定时任务 · 物流轨迹</p>
+      <p class="subtitle">库存预占 · 分布式锁 · 状态机 · 支付沙箱 · 退款流程 · 订单时间线 · 支付对账 · 预占明细</p>
     </header>
 
     <nav class="tabs">
@@ -19,6 +19,7 @@
       <button class="tab-btn" data-tab="orders">订单管理</button>
       <button class="tab-btn" data-tab="order-detail">订单详情</button>
       <button class="tab-btn" data-tab="refund">退款管理</button>
+      <button class="tab-btn" data-tab="payment">支付记录</button>
     </nav>
 
     <main>
@@ -93,14 +94,45 @@
       </section>
 
       <section id="refund" class="tab-content">
-        <h2>退款管理</h2>
+        <div class="section-header">
+          <h2>退款管理</h2>
+          <button class="btn btn-secondary" onclick="loadRefunds()">刷新</button>
+        </div>
+        <div class="filter-bar" id="refundFilterBar">
+          <button class="filter-btn active" onclick="filterRefunds('')">全部</button>
+          <button class="filter-btn" onclick="filterRefunds('PENDING')">待处理</button>
+          <button class="filter-btn" onclick="filterRefunds('PROCESSING')">处理中</button>
+          <button class="filter-btn" onclick="filterRefunds('COMPLETED')">已完成</button>
+          <button class="filter-btn" onclick="filterRefunds('REJECTED')">已拒绝</button>
+        </div>
         <div id="refundList" class="refund-list">
           <p class="empty">暂无退款记录</p>
+        </div>
+        <div id="refundDetailPanel" class="refund-detail-panel" style="display:none"></div>
+      </section>
+
+      <section id="payment" class="tab-content">
+        <div class="section-header">
+          <h2>支付记录</h2>
+          <button class="btn btn-secondary" onclick="loadPaymentRecords()">刷新</button>
+        </div>
+        <div id="paymentList" class="payment-list">
+          <p class="empty">暂无支付记录</p>
         </div>
       </section>
     </main>
 
     <div id="toast" class="toast"></div>
+  </div>
+
+  <div id="reservationModal" class="modal" style="display:none">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>库存预占明细</h3>
+        <button class="modal-close" onclick="closeReservationModal()">&times;</button>
+      </div>
+      <div id="reservationModalBody" class="modal-body"></div>
+    </div>
   </div>
 
   <script src="app.js"></script>

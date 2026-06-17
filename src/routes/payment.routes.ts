@@ -98,4 +98,13 @@ router.get('/order/:orderId', async (req: Request, res: Response) => {
   }
 });
 
+router.get('/records', async (req: Request, res: Response) => {
+  try {
+    const records = paymentService.getAllPaymentRecords();
+    res.json(success(records));
+  } catch (e: any) {
+    res.status(500).json(error('获取支付记录列表失败', 500));
+  }
+});
+
 export default router;

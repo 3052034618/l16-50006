@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { orderService } from '../services/order.service';
+import { orderEventService } from '../services/order-event.service';
 import { BusinessError } from '../utils';
 import { OrderStatus } from '../types';
 
@@ -49,6 +50,16 @@ router.get('/:orderId', async (req: Request, res: Response) => {
     } else {
       res.status(500).json(error('获取订单失败', 500));
     }
+  }
+});
+
+router.get('/:orderId/timeline', async (req: Request, res: Response) => {
+  try {
+    const { orderId } = req.params;
+    const events = orderEventService.getOrderTimeline(orderId);
+    res.json(success(events));
+  } catch (e: any) {
+    res.status(500).json(error('获取订单时间线失败', 500));
   }
 });
 

@@ -1,4 +1,4 @@
-import { Order, Product, StockReservation, PaymentRecord, RefundRecord } from '../types';
+import { Order, Product, StockReservation, PaymentRecord, RefundRecord, OrderEvent } from '../types';
 
 class InMemoryStore {
   private products: Map<string, Product> = new Map();
@@ -6,6 +6,7 @@ class InMemoryStore {
   private reservations: Map<string, StockReservation> = new Map();
   private paymentRecords: Map<string, PaymentRecord> = new Map();
   private refundRecords: Map<string, RefundRecord> = new Map();
+  private orderEvents: Map<string, OrderEvent> = new Map();
   private locks: Map<string, { value: string; expireAt: number }> = new Map();
 
   private static instance: InMemoryStore;
@@ -165,6 +166,43 @@ class InMemoryStore {
         this.locks.delete(key);
       }
     }
+  }
+
+  addOrderEvent(event: OrderEvent): void {
+    this.orderEvents.set(event.id, event);
+  }
+
+  getOrderEventsByOrderId(orderId: string): OrderEvent[] {
+    return Array.from(this.orderEvents.values())
+      .filter(e => e.orderId === orderId)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  }
+
+  getAllRefundRecords(): RefundRecord[] {
+    return Array.from(this.refundRecords.values())
+      .sort((a, b) => b.applyTime.getTime() - a.applyTime.getTime());
+  }
+
+  getRefundRecordsByStatus(status: string): RefundRecord[] {
+    return Array.from(this.refundRecords.values())
+      .filter(r => r.status === status)
+      .sort((a, b) => b.applyTime.getTime() - a.applyTime.getTime());
+  }
+
+  getAllPaymentRecords(): PaymentRecord[] {
+    return Array.from(this.paymentRecords.values())
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  getReservationsByProductId(productId: string): StockReservation[] {
+    return Array.from(this.reservations.values())
+      .filter(r => r.productId === productId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  getAllReservations(): StockReservation[] {
+    return Array.from(this.reservations.values())
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
 }
 

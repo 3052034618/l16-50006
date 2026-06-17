@@ -37,6 +37,16 @@ router.post('/apply', async (req: Request, res: Response) => {
   }
 });
 
+router.get('/list', async (req: Request, res: Response) => {
+  try {
+    const { status } = req.query;
+    const refunds = await refundService.getAllRefundRecords(status as string);
+    res.json(success(refunds));
+  } catch (e: any) {
+    res.status(500).json(error('获取退款列表失败', 500));
+  }
+});
+
 router.post('/:refundId/approve', async (req: Request, res: Response) => {
   try {
     const { refundId } = req.params;
